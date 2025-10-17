@@ -93,7 +93,8 @@ base_ui_css = """
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 100%;
+  width: 50%;
+  max-width: 50%;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -104,7 +105,8 @@ base_ui_css = """
   background: rgba(0,0,0,0.55) !important;
   border-radius: 10px !important;
   padding: 12px 14px !important;   /* less padding */
-  max-width: 300px !important;     /* smaller width */
+  width: 100% !important;          /* full width of wrapper (50% of screen) */
+  margin: 0 auto !important;       /* auto margins */
 }
 
 
@@ -282,7 +284,8 @@ def inject_login_background_and_center_card(image_path: str):
       left: 50% !important;
       top: 50% !important;
       transform: translate(-50%, -50%) !important;
-      width: 100% !important;
+      width: 50% !important;
+      max-width: 50% !important;
       display: flex !important;
       justify-content: center !important;
       align-items: center !important;
@@ -291,10 +294,12 @@ def inject_login_background_and_center_card(image_path: str):
       pointer-events: none; /* let underlying page interactions work unless over the card */
     }
 
-    /* Card styling: fixed width and centered */
+    /* Card styling: 100% of wrapper (which is 50% of screen) - SUPER SPECIFIC */
+    .login-center-wrapper .login-card,
     .login-card {
-      width: 300px !important;
-      max-width: 300px !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      min-width: 100% !important;
       background: rgba(0,0,0,0.65) !important;
       color: #fff !important;
       border-radius: 12px !important;
@@ -305,6 +310,7 @@ def inject_login_background_and_center_card(image_path: str):
       border: 1px solid rgba(255,255,255,0.03) !important;
       box-sizing: border-box !important;
       pointer-events: auto !important; /* make the card interactive */
+      flex-shrink: 0 !important;
     }
 
     /* Ensure Streamlit children inside the card do not stretch beyond card */
@@ -356,9 +362,33 @@ def inject_login_background_and_center_card(image_path: str):
 
     /* keep header visible if you prefer; comment out the next line to show Streamlit header */
     header[role="banner"] { display: none !important; }
+    
+    /* Force 50% width - WORKING! */
+    .login-center-wrapper { 
+      width: 50% !important; 
+      max-width: 50% !important; 
+      margin: 0 auto !important;
+    }
+    .login-card { 
+      width: 100% !important; 
+      max-width: 100% !important; 
+    }
+    
+    /* Override ALL Streamlit defaults */
+    .stApp .login-center-wrapper,
+    .main .login-center-wrapper,
+    .block-container .login-center-wrapper {
+      width: 50% !important;
+      max-width: 50% !important;
+      margin: 0 auto !important;
+    }
 
-    @media (max-width: 360px) {
-      .login-card { width: calc(100% - 24px) !important; max-width: calc(100% - 24px) !important; }
+    @media (max-width: 768px) {
+      .login-center-wrapper { width: 90% !important; max-width: 90% !important; }
+    }
+    
+    @media (max-width: 480px) {
+      .login-center-wrapper { width: 95% !important; max-width: 95% !important; }
     }
     </style>
     """
@@ -385,23 +415,24 @@ def login_signup_ui():
     # Inject CSS/background
     inject_login_background_and_center_card(AUTH_IMAGE_PATH_WINDOWS)
 
-    # Start wrapper + card
-    st.markdown('<div class="login-center-wrapper">', unsafe_allow_html=True)
-    st.markdown('<div class="login-card">', unsafe_allow_html=True)
+    # Start wrapper + card with inline styles to force 50% width
+    st.markdown('<div class="login-center-wrapper" style="width: 50% !important; max-width: 50% !important; margin: 0 auto !important;">', unsafe_allow_html=True)
+    st.markdown('<div class="login-card" style="width: 100% !important; max-width: 100% !important;">', unsafe_allow_html=True)
 
-    # small inline logo/title (tight)
-    st.markdown(
-        """
-        <div class="logo-row">
-          <div style="width:24px;height:24px;border-radius:6px;background:rgba(255,255,255,0.06);display:inline-block;margin-right:8px;"></div>
-          <div class="logo-text">Movie Explorer</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+   
 
-    # Tabs for Login / Signup
-    tabs = st.tabs(["Log in", "Sign up"])
+    st.markdown("""
+    <style>
+        /* Center the tabs container and set its width */
+        .stTabs {
+            width: 50%;
+            margin: 0 auto;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+    # Tabs for Login / Signup / Guest
+    tabs = st.tabs(["Log in", "Sign up", "Continue as Guest"])
 
     # --- Log in tab ---
     with tabs[0]:
@@ -449,6 +480,14 @@ def login_signup_ui():
                     st.rerun()
                 else:
                     st.error(res)
+
+    # --- Continue as Guest tab ---
+    with tabs[2]:
+        st.markdown("**Continue without creating an account**")
+        st.markdown("You can browse movies as a guest user.")
+        if st.button("Continue as Guest", use_container_width=True):
+            set_logged_in({"id": 0, "name": "Guest", "email": "guest@local"})
+            st.rerun()
 
     # Close card + wrapper
     st.markdown('</div>', unsafe_allow_html=True)
@@ -562,7 +601,10 @@ def browse_ui():
     with st.sidebar:
         st.success(f"Logged in as **{st.session_state['user']['name']}**")
         if st.button("Log out", use_container_width=True):
-            st.session_state.pop("user", None)
+            # Clear the user session completely
+            if "user" in st.session_state:
+                del st.session_state["user"]
+            # Force a complete page refresh to show login page
             st.rerun()
         st.markdown("---")
         st.markdown("<div class='sidebar-title'>Browse</div>", unsafe_allow_html=True)
@@ -630,12 +672,10 @@ def browse_ui():
                 movie_card(m, key_prefix="genre_")
 
 # ---------------- MAIN ----------------
-# Auto-skip login: when the app starts, ensure there's a default "Guest" user
-# so the browse/home page opens directly instead of showing the login/signup UI.
+# Check if user is logged in, if not show login page
 if not is_logged_in():
-    # set a minimal guest user so browse_ui() can rely on st.session_state['user']
-    set_logged_in({"id": 0, "name": "Guest", "email": "guest@local"})
-
-# Always show the browse homepage
-browse_ui()
+    login_signup_ui()
+else:
+    # User is logged in, show the browse homepage
+    browse_ui()
 
